@@ -8,9 +8,8 @@
 import UIKit
 
 class TodoListViewController: UIViewController {
-    var itemArray = ["Find Mike", "Buy Eggs", "Buy tomatoes"]
-    
-    let defaults = UserDefaults.standard
+    var itemArray = [Item]()
+    let dateFilePath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?.appendingPathComponent("Items.plist")
     
     private let tableView: UITableView = {
         let tableView = UITableView()
@@ -20,19 +19,18 @@ class TodoListViewController: UIViewController {
     
     override func viewDidLoad() {
         super.viewDidLoad()
-        tableView.backgroundColor = .white
+        
+        print(dateFilePath)
+        
         tableView.dataSource = self
         tableView.delegate = self
-        view.addSubview(tableView)
+        setupView()
+        setupConstraints()
+        loadItems()
         
         // BarButtonItem
-       navigationItem.rightBarButtonItem = UIBarButtonItem(barButtonSystemItem: .add, target: self, action: #selector(addButtonPressed))
+        navigationItem.rightBarButtonItem = UIBarButtonItem(barButtonSystemItem: .add, target: self, action: #selector(addButtonPressed))
         navigationController?.navigationBar.tintColor = .white
-        
-        //UserDefaults
-        if let items = defaults.array(forKey: "TodoListArray") as? [String] {
-            itemArray = items
-        }
     }
     
     override func viewWillAppear(_ animated: Bool) {
@@ -44,26 +42,23 @@ class TodoListViewController: UIViewController {
         
         navigationItem.title = "Todoey"
         navigationController?.navigationBar.standardAppearance = appearance
-//        navigationController?.navigationBar.compactAppearance = appearance
+        //        navigationController?.navigationBar.compactAppearance = appearance
         navigationController?.navigationBar.scrollEdgeAppearance = appearance
     }
     
-    override func viewDidLayoutSubviews() {
-        super.viewDidLayoutSubviews()
-        tableView.frame = view.bounds
-    }
-    
+    //MARK: - Add new items
     @objc func addButtonPressed() {
         var textField = UITextField()
         let alert = UIAlertController(title: "Add New Todoye Item", message: "", preferredStyle: .alert)
         
         let action = UIAlertAction(title: "Add Item", style: .default) { action in
             // Что случитится, когда пользователь нажмёт на кнопку "добавить элемент" на нашем UIAlertAction
-            self.itemArray.append(textField.text!)
+            let newItem = Item()
+            newItem.title = textField.text!
             
-            self.defaults.set(self.itemArray, forKey: "TodoListArray")
+            self.itemArray.append(newItem)
             
-            self.tableView.reloadData()
+            self.saveItems()
         }
         
         alert.addTextField { alertTextField in
@@ -72,8 +67,54 @@ class TodoListViewController: UIViewController {
         }
         
         alert.addAction(action)
-
+        
         present(alert, animated: true)
+    }
+    
+    //MARK: - Model manupulation methods
+    
+    func saveItems() {
+        let encoder = PropertyListEncoder()
+        
+        do {
+            let data = try encoder.encode(itemArray)
+            try data.write(to: dateFilePath!)
+        } catch {
+            print("Error encoding item array, \(error)")
+        }
+        
+        self.tableView.reloadData()
+    }
+    
+    func loadItems() {
+        if let data = try? Data(contentsOf: dateFilePath!) {
+            let decoder = PropertyListDecoder()
+            
+            do {
+                itemArray = try decoder.decode([Item].self, from: data)
+            } catch {
+                print("Error decoding item array, \(error)")
+            }
+        }
+    }
+}
+
+//MARK: - Setup view, Setup constraints
+extension TodoListViewController {
+    private func setupView() {
+        view.addSubview(tableView)
+        tableView.translatesAutoresizingMaskIntoConstraints = false
+        tableView.backgroundColor = .white
+    }
+    
+    private func setupConstraints() {
+        NSLayoutConstraint.activate([
+            tableView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 0),
+            tableView.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: 0),
+            tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 0),
+            tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: 0),
+            
+        ])
     }
 }
 
@@ -84,10 +125,13 @@ extension TodoListViewController: UITableViewDataSource {
     }
     
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        let notes = itemArray[indexPath.row]
+        let note = itemArray[indexPath.row]
         
         let cell = tableView.dequeueReusableCell(withIdentifier: ReuseTodoTableViewCell.identifire, for: indexPath) as! ReuseTodoTableViewCell
-        cell.textLabel?.text = notes
+        cell.textLabel?.text = note.title
+        
+        // Отображение галочки в зависимости от состояния заметки
+        cell.accessoryType = note.isDone ? .checkmark : .none
         
         return cell
     }
@@ -96,11 +140,10 @@ extension TodoListViewController: UITableViewDataSource {
 //MARK: - UITableViewDelegate methods
 extension TodoListViewController: UITableViewDelegate {
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
-        if tableView.cellForRow(at: indexPath)?.accessoryType == .checkmark {
-            tableView.cellForRow(at: indexPath)?.accessoryType = .none
-        } else {
-            tableView.cellForRow(at: indexPath)?.accessoryType = .checkmark
-        }
+        // Переключение состояния заметки true <-> false
+        itemArray[indexPath.row].isDone = !itemArray[indexPath.row].isDone
+        
+        saveItems()
         
         tableView.deselectRow(at: indexPath, animated: true)
     }
