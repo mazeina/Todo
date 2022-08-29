@@ -6,31 +6,37 @@
 //
 
 import UIKit
+import CoreData
 
 class TodoListViewController: UIViewController {
     var itemArray = [Item]()
-    let dateFilePath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?.appendingPathComponent("Items.plist")
+    let context = (UIApplication.shared.delegate as! AppDelegate).persistentContainer.viewContext
     
-    private let tableView: UITableView = {
+    lazy var tableView: UITableView = {
         let tableView = UITableView()
+        tableView.backgroundColor = .white
+        tableView.dataSource = self
+        tableView.delegate = self
         tableView.register(ReuseTodoTableViewCell.self, forCellReuseIdentifier: ReuseTodoTableViewCell.identifire)
+        
         return tableView
+    }()
+    
+    lazy var searchController: UISearchController = {
+        let searchController = UISearchController(searchResultsController: nil)
+        searchController.searchBar.delegate = self
+        
+        return searchController
     }()
     
     override func viewDidLoad() {
         super.viewDidLoad()
         
-        print(dateFilePath)
+        print(FileManager.default.urls(for: .documentDirectory, in: .userDomainMask))
         
-        tableView.dataSource = self
-        tableView.delegate = self
         setupView()
         setupConstraints()
         loadItems()
-        
-        // BarButtonItem
-        navigationItem.rightBarButtonItem = UIBarButtonItem(barButtonSystemItem: .add, target: self, action: #selector(addButtonPressed))
-        navigationController?.navigationBar.tintColor = .white
     }
     
     override func viewWillAppear(_ animated: Bool) {
@@ -42,7 +48,7 @@ class TodoListViewController: UIViewController {
         
         navigationItem.title = "Todoey"
         navigationController?.navigationBar.standardAppearance = appearance
-        //        navigationController?.navigationBar.compactAppearance = appearance
+//                navigationController?.navigationBar.compactAppearance = appearance
         navigationController?.navigationBar.scrollEdgeAppearance = appearance
     }
     
@@ -53,8 +59,9 @@ class TodoListViewController: UIViewController {
         
         let action = UIAlertAction(title: "Add Item", style: .default) { action in
             // Что случитится, когда пользователь нажмёт на кнопку "добавить элемент" на нашем UIAlertAction
-            let newItem = Item()
+            let newItem = Item(context: self.context)
             newItem.title = textField.text!
+            newItem.isDone = false
             
             self.itemArray.append(newItem)
             
@@ -74,28 +81,25 @@ class TodoListViewController: UIViewController {
     //MARK: - Model manupulation methods
     
     func saveItems() {
-        let encoder = PropertyListEncoder()
-        
         do {
-            let data = try encoder.encode(itemArray)
-            try data.write(to: dateFilePath!)
+           try context.save()
         } catch {
-            print("Error encoding item array, \(error)")
+            print("Error saving context, \(error)")
         }
         
         self.tableView.reloadData()
     }
     
-    func loadItems() {
-        if let data = try? Data(contentsOf: dateFilePath!) {
-            let decoder = PropertyListDecoder()
-            
-            do {
-                itemArray = try decoder.decode([Item].self, from: data)
-            } catch {
-                print("Error decoding item array, \(error)")
-            }
+    func loadItems(with request: NSFetchRequest<Item> = Item.fetchRequest()) {
+        print("loadItems start")
+        
+        do {
+          itemArray = try context.fetch(request)
+        } catch {
+            print("Error fatching data from context, \(error)")
         }
+        
+        tableView.reloadData()
     }
 }
 
@@ -104,7 +108,13 @@ extension TodoListViewController {
     private func setupView() {
         view.addSubview(tableView)
         tableView.translatesAutoresizingMaskIntoConstraints = false
-        tableView.backgroundColor = .white
+        
+        // AddBarButtonItem
+        navigationItem.rightBarButtonItem = UIBarButtonItem(barButtonSystemItem: .add, target: self, action: #selector(addButtonPressed))
+        navigationController?.navigationBar.tintColor = .white
+        
+        // Add searchController
+        navigationItem.searchController = searchController
     }
     
     private func setupConstraints() {
@@ -113,7 +123,6 @@ extension TodoListViewController {
             tableView.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: 0),
             tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 0),
             tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: 0),
-            
         ])
     }
 }
@@ -140,6 +149,10 @@ extension TodoListViewController: UITableViewDataSource {
 //MARK: - UITableViewDelegate methods
 extension TodoListViewController: UITableViewDelegate {
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+        // Удаляет элемент из списка при нажатии
+//        context.delete(itemArray[indexPath.row])
+//        itemArray.remove(at: indexPath.row)
+        
         // Переключение состояния заметки true <-> false
         itemArray[indexPath.row].isDone = !itemArray[indexPath.row].isDone
         
@@ -149,24 +162,30 @@ extension TodoListViewController: UITableViewDelegate {
     }
 }
 
-// MARK: - SwiftUI
-import SwiftUI
+//MARK: - UISearchBarDelegate methods
+extension TodoListViewController: UISearchBarDelegate {
 
-struct AuthenticationViewControllerProvider: PreviewProvider {
-    static var previews: some View {
-        ContainerView().edgesIgnoringSafeArea(.all)
+    // Поиск заметок по соответствию
+    func searchBarSearchButtonClicked(_ searchBar: UISearchBar) {
+        print("search button tapped, \(searchBar.text!)")
+        
+        let request: NSFetchRequest<Item> = Item.fetchRequest()
+        
+        request.predicate = NSPredicate(format: "title CONTAINS[cd] %@", searchBar.text!)
+        
+        request.sortDescriptors = [NSSortDescriptor(key: "title", ascending: true)]
+     
+        loadItems(with: request)
     }
     
-    struct ContainerView: UIViewControllerRepresentable {
-        
-        let viewController = TodoListViewController()
-        
-        func makeUIViewController(context: UIViewControllerRepresentableContext<AuthenticationViewControllerProvider.ContainerView>) -> TodoListViewController {
-            return viewController
-        }
-        
-        func updateUIViewController(_ uiViewController: AuthenticationViewControllerProvider.ContainerView.UIViewControllerType, context: UIViewControllerRepresentableContext<AuthenticationViewControllerProvider.ContainerView>) {
+    // Когда в UISearchBar нет текста - отображаются исходные данные
+    func searchBar(_ searchBar: UISearchBar, textDidChange searchText: String) {
+        if searchBar.text?.count == 0 {
+            loadItems()
             
+            DispatchQueue.main.async {
+                searchBar.resignFirstResponder()
+            }
         }
     }
 }
