@@ -7,6 +7,7 @@
 
 import UIKit
 import CoreData
+import ChameleonFramework
 
 class TodoListViewController: UIViewController {
     var itemArray = [Item]()
@@ -25,6 +26,7 @@ class TodoListViewController: UIViewController {
     lazy var searchController: UISearchController = {
         let searchController = UISearchController(searchResultsController: nil)
         searchController.searchBar.delegate = self
+        searchController.searchBar.showsCancelButton = false
         
         return searchController
     }()
@@ -43,7 +45,7 @@ class TodoListViewController: UIViewController {
         super.viewWillAppear(animated)
         
         let appearance = UINavigationBarAppearance()
-        appearance.backgroundColor = .systemBlue
+        appearance.backgroundColor = UIColor.flatPurple()
         appearance.titleTextAttributes = [.foregroundColor: UIColor.white]
         
         navigationItem.title = "Todoey"
@@ -62,6 +64,7 @@ class TodoListViewController: UIViewController {
             let newItem = Item(context: self.context)
             newItem.title = textField.text!
             newItem.isDone = false
+//            newItem.color = UIColor.flatSkyBlue().hexValue()
             
             self.itemArray.append(newItem)
             
@@ -91,8 +94,6 @@ class TodoListViewController: UIViewController {
     }
     
     func loadItems(with request: NSFetchRequest<Item> = Item.fetchRequest()) {
-        print("loadItems start")
-        
         do {
           itemArray = try context.fetch(request)
         } catch {
@@ -138,9 +139,15 @@ extension TodoListViewController: UITableViewDataSource {
         
         let cell = tableView.dequeueReusableCell(withIdentifier: ReuseTodoTableViewCell.identifire, for: indexPath) as! ReuseTodoTableViewCell
         cell.textLabel?.text = note.title
+        cell.tintColor = UIColor.flatPurple()
         
         // Отображение галочки в зависимости от состояния заметки
         cell.accessoryType = note.isDone ? .checkmark : .none
+        
+        if let color = UIColor.flatWhite().darken(byPercentage: CGFloat(indexPath.row) / CGFloat(itemArray.count)) {
+            cell.backgroundColor = color
+            cell.textLabel?.textColor = ContrastColorOf(color, returnFlat: true)
+        }
         
         return cell
     }
@@ -149,16 +156,24 @@ extension TodoListViewController: UITableViewDataSource {
 //MARK: - UITableViewDelegate methods
 extension TodoListViewController: UITableViewDelegate {
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
-        // Удаляет элемент из списка при нажатии
-//        context.delete(itemArray[indexPath.row])
-//        itemArray.remove(at: indexPath.row)
-        
         // Переключение состояния заметки true <-> false
         itemArray[indexPath.row].isDone = !itemArray[indexPath.row].isDone
         
         saveItems()
         
         tableView.deselectRow(at: indexPath, animated: true)
+    }
+    
+    func tableView(_ tableView: UITableView, commit editingStyle: UITableViewCell.EditingStyle, forRowAt indexPath: IndexPath) {
+        // Удаление заметки по свайпу
+        if editingStyle == .delete {
+            context.delete(itemArray[indexPath.row])
+            itemArray.remove(at: indexPath.row)
+            
+            tableView.deleteRows(at: [indexPath], with: .fade)
+            
+            saveItems()
+        }
     }
 }
 
@@ -167,8 +182,6 @@ extension TodoListViewController: UISearchBarDelegate {
 
     // Поиск заметок по соответствию
     func searchBarSearchButtonClicked(_ searchBar: UISearchBar) {
-        print("search button tapped, \(searchBar.text!)")
-        
         let request: NSFetchRequest<Item> = Item.fetchRequest()
         
         request.predicate = NSPredicate(format: "title CONTAINS[cd] %@", searchBar.text!)
