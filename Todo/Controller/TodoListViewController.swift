@@ -26,7 +26,6 @@ class TodoListViewController: UIViewController {
     lazy var searchController: UISearchController = {
         let searchController = UISearchController(searchResultsController: nil)
         searchController.searchBar.delegate = self
-        searchController.searchBar.showsCancelButton = false
         
         return searchController
     }()
@@ -34,7 +33,7 @@ class TodoListViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         
-        print(FileManager.default.urls(for: .documentDirectory, in: .userDomainMask))
+//        print(FileManager.default.urls(for: .documentDirectory, in: .userDomainMask))
         
         setupView()
         setupConstraints()
@@ -50,7 +49,6 @@ class TodoListViewController: UIViewController {
         
         navigationItem.title = "Todoey"
         navigationController?.navigationBar.standardAppearance = appearance
-//                navigationController?.navigationBar.compactAppearance = appearance
         navigationController?.navigationBar.scrollEdgeAppearance = appearance
     }
     
@@ -64,7 +62,6 @@ class TodoListViewController: UIViewController {
             let newItem = Item(context: self.context)
             newItem.title = textField.text!
             newItem.isDone = false
-//            newItem.color = UIColor.flatSkyBlue().hexValue()
             
             self.itemArray.append(newItem)
             
@@ -114,7 +111,7 @@ extension TodoListViewController {
         navigationItem.rightBarButtonItem = UIBarButtonItem(barButtonSystemItem: .add, target: self, action: #selector(addButtonPressed))
         navigationController?.navigationBar.tintColor = .white
         
-        // Add searchController
+        // Добавление searchController
         navigationItem.searchController = searchController
     }
     
